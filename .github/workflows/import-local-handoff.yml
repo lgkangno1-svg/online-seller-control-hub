@@ -35,8 +35,6 @@ jobs:
           [[ "$actual" == "$EXPECTED_SHA256" ]]
           source_sha="$(curl --fail --silent --show-error "$TRANSFER_BASE/SOURCE" | tr -d '\r\n')"
           [[ "$source_sha" == "$EXPECTED_SOURCE" ]]
-          echo "verified_sha256=$actual"
-          echo "verified_source=$source_sha"
 
       - name: Extract and validate standalone tree
         shell: bash
@@ -70,17 +68,20 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
 
-      - name: Replace repository with verified standalone tree
+      - name: Replace app tree but preserve workflow directory
         shell: bash
         run: |
           set -euo pipefail
-          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -a "$RUNNER_TEMP/sellerhub-import/." .
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name .github -exec rm -rf {} +
+          for entry in "$RUNNER_TEMP"/sellerhub-import/* "$RUNNER_TEMP"/sellerhub-import/.[!.]* "$RUNNER_TEMP"/sellerhub-import/..?*; do
+            [[ -e "$entry" ]] || continue
+            [[ "$(basename "$entry")" == '.github' ]] && continue
+            cp -a "$entry" .
+          done
           rm -rf .sellerhub-import .sellerhub-transfer || true
           rm -f config/admin-bootstrap.enc .env || true
-          rm -f .github/workflows/import-local-handoff.yml .github/workflows/import-sellerhub.yml .github/workflows/handoff-probe.yml || true
           git config user.name 'sellerhub-migration-bot'
           git config user.email 'sellerhub-migration-bot@users.noreply.github.com'
-          git add -A
-          git commit -m "chore: import verified standalone SellerHub from $EXPECTED_SOURCE"
+          git add -A -- . ':!.github/workflows'
+          git commit -m "chore: import verified standalone SellerHub app from $EXPECTED_SOURCE"
           git push origin HEAD:main
