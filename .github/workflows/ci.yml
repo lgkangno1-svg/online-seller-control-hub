@@ -1,0 +1,65 @@
+name: SellerHub CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sellerhub-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - name: Backend install
+        run: npm ci --no-audit --no-fund
+
+      - name: Backend typecheck and tests
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Web install
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      - name: Web production build
+        working-directory: web
+        run: npm run build
+
+      - name: Validate production files and public-repo hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s Dockerfile
+          test -s docker-compose.production.yml
+          grep -q '^USER node$' Dockerfile
+          grep -Fq '127.0.0.1:8787:8787' docker-compose.production.yml
+          grep -Fq 'no-new-privileges:true' docker-compose.production.yml
+          grep -Fq '${SELLERHUB_DATA_DIR:-./data}:/app/data' docker-compose.production.yml
+          bash -n ops/deploy_minipc.sh
+          bash -n ops/preflight_production.sh
+          bash -n scripts/install_minipc_deployer.sh
+          test ! -e .env
+          test ! -e config/admin-bootstrap.enc
+          test ! -e web/public/__sellerhub_migration_v1.b64
+          test ! -e web/public/__sellerhub_migration_v1.sha256
