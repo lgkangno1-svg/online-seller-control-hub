@@ -21,29 +21,45 @@ test("groups a mixed shipment batch by marketplace without reordering each marke
   assert.deepEqual(groups[1]?.items.map((item) => item.orderLineId), ["coupang-1"]);
 });
 
-test("chunks each marketplace independently for bounded API calls", () => {
+test("chunks each marketplace independently with payload-bound retry keys", () => {
   const batches = chunkShipmentBatchByMarket([
     { market: "naver", orderLineId: "n-1", carrierCode: "CJGLS", trackingNumber: "1001" },
     { market: "coupang", orderLineId: "c-1", carrierCode: "HANJIN", trackingNumber: "2001" },
     { market: "naver", orderLineId: "n-2", carrierCode: "CJGLS", trackingNumber: "1002" },
     { market: "naver", orderLineId: "n-3", carrierCode: "CJGLS", trackingNumber: "1003" }
   ], 2);
-  assert.deepEqual(batches.map((batch) => [batch.market, batch.batchIndex, batch.batchCount, batch.retryKey, batch.items.map((item) => item.orderLineId)]), [
-    ["naver", 0, 2, "naver:1/2", ["n-1", "n-2"]],
-    ["naver", 1, 2, "naver:2/2", ["n-3"]],
-    ["coupang", 0, 1, "coupang:1/1", ["c-1"]]
+  assert.deepEqual(batches.map((batch) => [batch.market, batch.batchIndex, batch.batchCount, batch.items.map((item) => item.orderLineId)]), [
+    ["naver", 0, 2, ["n-1", "n-2"]],
+    ["naver", 1, 2, ["n-3"]],
+    ["coupang", 0, 1, ["c-1"]]
   ]);
+  assert.match(batches[0]!.retryKey, /^naver:1\/2:[a-f0-9]{16}$/);
+  assert.equal(new Set(batches.map((batch) => batch.retryKey)).size, batches.length);
 });
 
-test("resumes after the last successful shipment API chunk", () => {
-  const batches = chunkShipmentBatchByMarket([
+test("resumes after the exact last successful shipment API chunk", () => {
+  const input = [
     { market: "naver", orderLineId: "n-1", carrierCode: "CJGLS", trackingNumber: "1001" },
     { market: "naver", orderLineId: "n-2", carrierCode: "CJGLS", trackingNumber: "1002" },
     { market: "naver", orderLineId: "n-3", carrierCode: "CJGLS", trackingNumber: "1003" },
     { market: "coupang", orderLineId: "c-1", carrierCode: "HANJIN", trackingNumber: "2001" }
-  ], 2);
-  assert.deepEqual(resumeShipmentApiBatches(batches, "naver:1/2").map((batch) => batch.retryKey), ["naver:2/2", "coupang:1/1"]);
-  assert.throws(() => resumeShipmentApiBatches(batches, "naver:9/9"), /does not belong/);
+  ] as const;
+  const batches = chunkShipmentBatchByMarket(input, 2);
+  assert.deepEqual(resumeShipmentApiBatches(batches, batches[0]!.retryKey).map((batch) => batch.retryKey), batches.slice(1).map((batch) => batch.retryKey));
+  assert.throws(() => resumeShipmentApiBatches(batches, "naver:9/9:0000000000000000"), /does not belong/);
+});
+
+test("rejects a checkpoint when shipment payload changed", () => {
+  const original = chunkShipmentBatchByMarket([
+    { market: "naver", orderLineId: "n-1", carrierCode: "CJGLS", trackingNumber: "1001" },
+    { market: "naver", orderLineId: "n-2", carrierCode: "CJGLS", trackingNumber: "1002" }
+  ], 1);
+  const edited = chunkShipmentBatchByMarket([
+    { market: "naver", orderLineId: "n-1", carrierCode: "CJGLS", trackingNumber: "9999" },
+    { market: "naver", orderLineId: "n-2", carrierCode: "CJGLS", trackingNumber: "1002" }
+  ], 1);
+  assert.notEqual(original[0]!.retryKey, edited[0]!.retryKey);
+  assert.throws(() => resumeShipmentApiBatches(edited, original[0]!.retryKey), /does not belong/);
 });
 
 test("rejects invalid marketplace API chunk limits", () => {
