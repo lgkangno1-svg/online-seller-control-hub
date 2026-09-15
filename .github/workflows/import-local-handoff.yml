@@ -1,4 +1,4 @@
-name: Import SellerHub Local Handoff
+name: Import SellerHub Verified Transfer
 
 on:
   push:
@@ -12,8 +12,12 @@ permissions:
 
 jobs:
   import:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TRANSFER_BASE: https://gave-isbn-targeted-nest.trycloudflare.com
+      EXPECTED_SHA256: cba0fcad86f566cae728776202652479addf0e498a77752253a6f6e719b45fec
+      EXPECTED_SOURCE: da2fb1791fcd8ad68656f3a33374a9b9960d8dd5
     steps:
       - name: Checkout destination
         uses: actions/checkout@v4
@@ -21,18 +25,18 @@ jobs:
           fetch-depth: 1
           persist-credentials: true
 
-      - name: Verify local handoff bundle
+      - name: Download and verify sanitized bundle
         shell: bash
         run: |
           set -euo pipefail
-          test -s /tmp/sellerhub-handoff.tar.gz
-          test -s /tmp/sellerhub-handoff.sha256
-          test -s /tmp/sellerhub-handoff.source
-          expected="$(cat /tmp/sellerhub-handoff.sha256)"
-          actual="$(sha256sum /tmp/sellerhub-handoff.tar.gz | awk '{print $1}')"
-          [[ "$actual" == "$expected" ]]
-          echo "source=$(cat /tmp/sellerhub-handoff.source)"
-          echo "sha256=$actual"
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --connect-timeout 10 \
+            "$TRANSFER_BASE/bundle.tar.gz" -o "$RUNNER_TEMP/sellerhub-handoff.tar.gz"
+          actual="$(sha256sum "$RUNNER_TEMP/sellerhub-handoff.tar.gz" | awk '{print $1}')"
+          [[ "$actual" == "$EXPECTED_SHA256" ]]
+          source_sha="$(curl --fail --silent --show-error "$TRANSFER_BASE/SOURCE" | tr -d '\r\n')"
+          [[ "$source_sha" == "$EXPECTED_SOURCE" ]]
+          echo "verified_sha256=$actual"
+          echo "verified_source=$source_sha"
 
       - name: Extract and validate standalone tree
         shell: bash
@@ -40,7 +44,7 @@ jobs:
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/sellerhub-import"
           mkdir -p "$RUNNER_TEMP/sellerhub-import"
-          tar -xzf /tmp/sellerhub-handoff.tar.gz -C "$RUNNER_TEMP/sellerhub-import"
+          tar -xzf "$RUNNER_TEMP/sellerhub-handoff.tar.gz" -C "$RUNNER_TEMP/sellerhub-import"
           test -s "$RUNNER_TEMP/sellerhub-import/package.json"
           test -s "$RUNNER_TEMP/sellerhub-import/web/package.json"
           test -s "$RUNNER_TEMP/sellerhub-import/src/index.ts"
@@ -78,10 +82,5 @@ jobs:
           git config user.name 'sellerhub-migration-bot'
           git config user.email 'sellerhub-migration-bot@users.noreply.github.com'
           git add -A
-          git commit -m "chore: import verified standalone SellerHub from $(cat /tmp/sellerhub-handoff.source)"
+          git commit -m "chore: import verified standalone SellerHub from $EXPECTED_SOURCE"
           git push origin HEAD:main
-
-      - name: Clear handoff files
-        if: always()
-        shell: bash
-        run: rm -f /tmp/sellerhub-handoff.tar.gz /tmp/sellerhub-handoff.sha256 /tmp/sellerhub-handoff.source
