@@ -1,3 +1,3 @@
-# Online Seller Control Hub
+# online-seller-control-hub
 
-Repository bootstrap for the SellerHub split migration.
+Standalone SellerHub repository migration in progress.
