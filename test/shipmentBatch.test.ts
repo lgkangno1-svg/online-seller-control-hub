@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chunkShipmentBatchByMarket, groupShipmentBatchByMarket, validateShipmentBatch } from "../src/orders/shipmentBatch.js";
+import { chunkShipmentBatchByMarket, groupShipmentBatchByMarket, resumeShipmentApiBatches, validateShipmentBatch } from "../src/orders/shipmentBatch.js";
 
 test("accepts a bounded shipment batch", () => {
   const batch = validateShipmentBatch([
@@ -28,11 +28,22 @@ test("chunks each marketplace independently for bounded API calls", () => {
     { market: "naver", orderLineId: "n-2", carrierCode: "CJGLS", trackingNumber: "1002" },
     { market: "naver", orderLineId: "n-3", carrierCode: "CJGLS", trackingNumber: "1003" }
   ], 2);
-  assert.deepEqual(batches.map((batch) => [batch.market, batch.batchIndex, batch.batchCount, batch.items.map((item) => item.orderLineId)]), [
-    ["naver", 0, 2, ["n-1", "n-2"]],
-    ["naver", 1, 2, ["n-3"]],
-    ["coupang", 0, 1, ["c-1"]]
+  assert.deepEqual(batches.map((batch) => [batch.market, batch.batchIndex, batch.batchCount, batch.retryKey, batch.items.map((item) => item.orderLineId)]), [
+    ["naver", 0, 2, "naver:1/2", ["n-1", "n-2"]],
+    ["naver", 1, 2, "naver:2/2", ["n-3"]],
+    ["coupang", 0, 1, "coupang:1/1", ["c-1"]]
   ]);
+});
+
+test("resumes after the last successful shipment API chunk", () => {
+  const batches = chunkShipmentBatchByMarket([
+    { market: "naver", orderLineId: "n-1", carrierCode: "CJGLS", trackingNumber: "1001" },
+    { market: "naver", orderLineId: "n-2", carrierCode: "CJGLS", trackingNumber: "1002" },
+    { market: "naver", orderLineId: "n-3", carrierCode: "CJGLS", trackingNumber: "1003" },
+    { market: "coupang", orderLineId: "c-1", carrierCode: "HANJIN", trackingNumber: "2001" }
+  ], 2);
+  assert.deepEqual(resumeShipmentApiBatches(batches, "naver:1/2").map((batch) => batch.retryKey), ["naver:2/2", "coupang:1/1"]);
+  assert.throws(() => resumeShipmentApiBatches(batches, "naver:9/9"), /does not belong/);
 });
 
 test("rejects invalid marketplace API chunk limits", () => {
