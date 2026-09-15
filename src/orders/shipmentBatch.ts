@@ -10,6 +10,7 @@ const shipmentSchema = z.object({
 
 export type ShipmentInput = z.infer<typeof shipmentSchema>;
 export type ShipmentMarketBatch = { market: Market; items: ShipmentInput[] };
+export type ShipmentApiBatch = ShipmentMarketBatch & { batchIndex: number; batchCount: number };
 
 export const shipmentBatchSchema = z.array(shipmentSchema).min(1).max(500).superRefine((items, ctx) => {
   const orderLines = new Set<string>();
@@ -50,4 +51,29 @@ export function groupShipmentBatchByMarket(input: unknown): ShipmentMarketBatch[
     else grouped.set(item.market, [item]);
   }
   return [...grouped.entries()].map(([market, marketItems]) => ({ market, items: marketItems }));
+}
+
+/**
+ * Converts a mixed shipment import into bounded marketplace API calls. Keeping
+ * chunking here prevents adapters from silently truncating oversized batches
+ * and makes partial-failure retry boundaries explicit to callers.
+ */
+export function chunkShipmentBatchByMarket(input: unknown, maxItemsPerCall = 50): ShipmentApiBatch[] {
+  if (!Number.isSafeInteger(maxItemsPerCall) || maxItemsPerCall < 1 || maxItemsPerCall > 500) {
+    throw new Error("maxItemsPerCall must be an integer between 1 and 500");
+  }
+
+  const result: ShipmentApiBatch[] = [];
+  for (const group of groupShipmentBatchByMarket(input)) {
+    const batchCount = Math.ceil(group.items.length / maxItemsPerCall);
+    for (let offset = 0, batchIndex = 0; offset < group.items.length; offset += maxItemsPerCall, batchIndex += 1) {
+      result.push({
+        market: group.market,
+        items: group.items.slice(offset, offset + maxItemsPerCall),
+        batchIndex,
+        batchCount
+      });
+    }
+  }
+  return result;
 }
