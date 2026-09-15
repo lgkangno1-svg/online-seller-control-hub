@@ -61,8 +61,8 @@ export function createTelegramBot(deps: {
       await ctx.answerCallbackQuery({ text: "만료되었거나 이미 처리된 승인입니다." });
       return;
     }
-    await ctx.answerCallbackQuery({ text: "실행합니다." });
-    const results = await deps.control.execute(approval.product, approval.command);
+    await ctx.answerCallbackQuery({ text: "최신 상태를 확인한 뒤 실행합니다." });
+    const results = await deps.control.executeApproved(approval.product, approval.command, approval.snapshot);
     await deps.audit.record({ actor, masterSku: approval.product.masterSku, command: approval.command, results });
     await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
     await ctx.reply(formatResults(results));
