@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { MARKETS, type Market } from "../core/types.js";
 
@@ -37,11 +38,6 @@ export function validateShipmentBatch(input: unknown): ShipmentInput[] {
   return shipmentBatchSchema.parse(input);
 }
 
-/**
- * Validates once, then groups shipment updates by marketplace while preserving
- * input order. Marketplace adapters can consume these bounded groups without
- * accidentally sending another marketplace's order IDs to the wrong API.
- */
 export function groupShipmentBatchByMarket(input: unknown): ShipmentMarketBatch[] {
   const items = validateShipmentBatch(input);
   const grouped = new Map<Market, ShipmentInput[]>();
@@ -53,12 +49,17 @@ export function groupShipmentBatchByMarket(input: unknown): ShipmentMarketBatch[
   return [...grouped.entries()].map(([market, marketItems]) => ({ market, items: marketItems }));
 }
 
+function shipmentChunkFingerprint(items: ShipmentInput[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify(items.map(({ market, orderLineId, carrierCode, trackingNumber }) => [market, orderLineId, carrierCode, trackingNumber])))
+    .digest("hex")
+    .slice(0, 16);
+}
+
 /**
- * Converts a mixed shipment import into bounded marketplace API calls. Keeping
- * chunking here prevents adapters from silently truncating oversized batches
- * and makes partial-failure retry boundaries explicit to callers. retryKey is
- * deterministic so a worker can persist the last successful chunk and resume
- * without replaying earlier marketplace writes.
+ * Converts a mixed shipment import into bounded marketplace API calls. retryKey
+ * includes a payload fingerprint so a checkpoint from an edited shipment plan
+ * cannot silently skip different marketplace writes.
  */
 export function chunkShipmentBatchByMarket(input: unknown, maxItemsPerCall = 50): ShipmentApiBatch[] {
   if (!Number.isSafeInteger(maxItemsPerCall) || maxItemsPerCall < 1 || maxItemsPerCall > 500) {
@@ -69,12 +70,13 @@ export function chunkShipmentBatchByMarket(input: unknown, maxItemsPerCall = 50)
   for (const group of groupShipmentBatchByMarket(input)) {
     const batchCount = Math.ceil(group.items.length / maxItemsPerCall);
     for (let offset = 0, batchIndex = 0; offset < group.items.length; offset += maxItemsPerCall, batchIndex += 1) {
+      const items = group.items.slice(offset, offset + maxItemsPerCall);
       result.push({
         market: group.market,
-        items: group.items.slice(offset, offset + maxItemsPerCall),
+        items,
         batchIndex,
         batchCount,
-        retryKey: `${group.market}:${batchIndex + 1}/${batchCount}`
+        retryKey: `${group.market}:${batchIndex + 1}/${batchCount}:${shipmentChunkFingerprint(items)}`
       });
     }
   }
