@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MARKETS } from "../core/types.js";
+import { MARKETS, type Market } from "../core/types.js";
 
 const shipmentSchema = z.object({
   market: z.enum(MARKETS),
@@ -9,6 +9,7 @@ const shipmentSchema = z.object({
 });
 
 export type ShipmentInput = z.infer<typeof shipmentSchema>;
+export type ShipmentMarketBatch = { market: Market; items: ShipmentInput[] };
 
 export const shipmentBatchSchema = z.array(shipmentSchema).min(1).max(500).superRefine((items, ctx) => {
   const orderLines = new Set<string>();
@@ -33,4 +34,20 @@ export const shipmentBatchSchema = z.array(shipmentSchema).min(1).max(500).super
 
 export function validateShipmentBatch(input: unknown): ShipmentInput[] {
   return shipmentBatchSchema.parse(input);
+}
+
+/**
+ * Validates once, then groups shipment updates by marketplace while preserving
+ * input order. Marketplace adapters can consume these bounded groups without
+ * accidentally sending another marketplace's order IDs to the wrong API.
+ */
+export function groupShipmentBatchByMarket(input: unknown): ShipmentMarketBatch[] {
+  const items = validateShipmentBatch(input);
+  const grouped = new Map<Market, ShipmentInput[]>();
+  for (const item of items) {
+    const marketItems = grouped.get(item.market);
+    if (marketItems) marketItems.push(item);
+    else grouped.set(item.market, [item]);
+  }
+  return [...grouped.entries()].map(([market, marketItems]) => ({ market, items: marketItems }));
 }
