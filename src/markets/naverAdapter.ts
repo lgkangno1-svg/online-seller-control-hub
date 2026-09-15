@@ -10,6 +10,7 @@ import {
   setCachedAccessToken
 } from "./accessTokenCache.js";
 import type { MarketAdapter } from "./adapter.js";
+import { naverApiErrorMessage } from "./naverApiError.js";
 import { isRetryableStatus, retryAfterMs, SerialRateLimiter, sleep } from "./rateLimiter.js";
 
 type NaverCredentials = { clientId: string; clientSecret: string; accountId: string };
@@ -178,7 +179,7 @@ export class NaverMarketAdapter implements MarketAdapter {
         signal: controller.signal
       });
       const body = await parseJson(response);
-      if (!response.ok) throw new Error(`네이버 OAuth HTTP ${response.status}: ${messageOf(body)}`);
+      if (!response.ok) throw new Error(naverApiErrorMessage("네이버 OAuth", response, body));
       const parsed = tokenSchema.parse(body);
       setCachedAccessToken(cacheKey, parsed.access_token, parsed.expires_in ?? 10_800);
       return parsed.access_token;
@@ -208,7 +209,7 @@ export class NaverMarketAdapter implements MarketAdapter {
             await sleep(retryAfterMs(response, attempt));
             continue;
           }
-          throw new Error(`${label} HTTP ${response.status}: ${messageOf(body)}`);
+          throw new Error(naverApiErrorMessage(label, response, body));
         }
         return body;
       } catch (error) {
@@ -258,19 +259,16 @@ function finiteNumber(value: unknown): number | null {
 }
 
 function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value ? value : null;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 async function parseJson(response: Response): Promise<unknown> {
   const text = await response.text();
-  if (!text) return {};
+  if (!text.trim()) return {};
   try { return JSON.parse(text); } catch { return { message: text.slice(0, 500) }; }
 }
 
 function messageOf(body: unknown): string {
-  if (!body || typeof body !== "object") return "request failed";
-  const root = body as Record<string, unknown>;
-  if (typeof root.message === "string") return root.message;
-  if (typeof root.code === "string") return root.code;
-  return "request failed";
+  const root = objectValue(body);
+  return stringValue(root.message) ?? stringValue(root.code) ?? "request failed";
 }
