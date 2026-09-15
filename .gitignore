@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.production
+backups/
+data/*.json
+data/*.jsonl
+!data/.gitkeep
+.DS_Store

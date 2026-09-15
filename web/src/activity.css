@@ -1,0 +1,60 @@
+.activity-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.activity-summary > div {
+  min-height: 76px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: white;
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: #5d6a82;
+}
+.activity-summary span { font-size: 10px; font-weight: 700; }
+.activity-summary strong { color: var(--text); font-size: 19px; }
+
+.activity-list { overflow: hidden; }
+.activity-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 82px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--border);
+}
+.activity-row:last-child { border-bottom: 0; }
+.activity-row:hover { background: #fafcff; }
+.activity-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+}
+.activity-icon.success { background: #effaf4; color: #16834f; }
+.activity-icon.fail { background: #fff2f3; color: #c53e46; }
+.activity-main { min-width: 0; }
+.activity-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.activity-title strong { font-size: 11px; color: #29354b; }
+.activity-title code { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #71809a; font-size: 9px; }
+.activity-main p { margin: 5px 0 0; color: #66728a; font-size: 9px; line-height: 1.5; }
+.activity-value { display: inline-block; margin: 5px 7px 0 0; padding: 3px 6px; border-radius: 6px; background: #f2f5fa; color: #526079; font-size: 8px; }
+.activity-meta { min-width: 110px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.activity-meta strong { color: #344056; font-size: 9px; }
+.activity-meta span, .activity-meta time { color: var(--muted); font-size: 8px; }
+.activity-empty { padding: 60px 20px; text-align: center; color: var(--muted); font-size: 11px; }
+
+@media (max-width: 720px) {
+  .activity-summary { grid-template-columns: 1fr; }
+  .activity-summary > div { min-height: 58px; }
+  .activity-row { grid-template-columns: 34px minmax(0, 1fr); }
+  .activity-meta { grid-column: 2; align-items: flex-start; flex-direction: row; flex-wrap: wrap; min-width: 0; }
+}

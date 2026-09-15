@@ -3,9 +3,8 @@ web/node_modules
 web/dist
 dist
 .env
-*.log
-.DS_Store
-coverage
+.env.*
+!.env.example
 data
-*.tmp
-*.bak
+.git
+.DS_Store

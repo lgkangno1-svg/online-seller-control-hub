@@ -1,0 +1,16 @@
+[
+  {
+    "tenantId": "demo",
+    "masterSku": "SAMPLE-APPLE-5KG",
+    "name": "샘플 사과 5kg",
+    "aliases": ["사과 5키로", "샘플사과"],
+    "markets": {
+      "naver": { "externalId": "NAVER_PRODUCT_ID" },
+      "coupang": { "externalId": "COUPANG_VENDOR_ITEM_ID" },
+      "gmarket": { "externalId": "GMARKET_GOODS_NO" },
+      "lotteon": { "externalId": "LOTTEON_PRODUCT_ID" },
+      "toss": { "externalId": "TOSS_PRODUCT_ID" },
+      "kakao": { "externalId": "KAKAO_PRODUCT_ID" }
+    }
+  }
+]
