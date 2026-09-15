@@ -1,0 +1,27 @@
+name: SellerHub Target Handoff Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/handoff-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: self-hosted
+    timeout-minutes: 5
+    steps:
+      - name: Verify target runner host and handoff visibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "host=$(hostname)"
+          if [[ -f /tmp/sellerhub-handoff.tar.gz ]]; then
+            echo 'handoff=present'
+            sha256sum /tmp/sellerhub-handoff.tar.gz
+          else
+            echo 'handoff=missing'
+          fi
