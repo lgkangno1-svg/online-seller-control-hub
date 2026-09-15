@@ -10,7 +10,7 @@ const shipmentSchema = z.object({
 
 export type ShipmentInput = z.infer<typeof shipmentSchema>;
 export type ShipmentMarketBatch = { market: Market; items: ShipmentInput[] };
-export type ShipmentApiBatch = ShipmentMarketBatch & { batchIndex: number; batchCount: number };
+export type ShipmentApiBatch = ShipmentMarketBatch & { batchIndex: number; batchCount: number; retryKey: string };
 
 export const shipmentBatchSchema = z.array(shipmentSchema).min(1).max(500).superRefine((items, ctx) => {
   const orderLines = new Set<string>();
@@ -56,7 +56,9 @@ export function groupShipmentBatchByMarket(input: unknown): ShipmentMarketBatch[
 /**
  * Converts a mixed shipment import into bounded marketplace API calls. Keeping
  * chunking here prevents adapters from silently truncating oversized batches
- * and makes partial-failure retry boundaries explicit to callers.
+ * and makes partial-failure retry boundaries explicit to callers. retryKey is
+ * deterministic so a worker can persist the last successful chunk and resume
+ * without replaying earlier marketplace writes.
  */
 export function chunkShipmentBatchByMarket(input: unknown, maxItemsPerCall = 50): ShipmentApiBatch[] {
   if (!Number.isSafeInteger(maxItemsPerCall) || maxItemsPerCall < 1 || maxItemsPerCall > 500) {
@@ -71,9 +73,18 @@ export function chunkShipmentBatchByMarket(input: unknown, maxItemsPerCall = 50)
         market: group.market,
         items: group.items.slice(offset, offset + maxItemsPerCall),
         batchIndex,
-        batchCount
+        batchCount,
+        retryKey: `${group.market}:${batchIndex + 1}/${batchCount}`
       });
     }
   }
   return result;
+}
+
+/** Returns only chunks after the last confirmed marketplace write. */
+export function resumeShipmentApiBatches(batches: ShipmentApiBatch[], lastSuccessfulRetryKey?: string): ShipmentApiBatch[] {
+  if (!lastSuccessfulRetryKey) return batches;
+  const index = batches.findIndex((batch) => batch.retryKey === lastSuccessfulRetryKey);
+  if (index < 0) throw new Error("last successful shipment retry key does not belong to this batch plan");
+  return batches.slice(index + 1);
 }
