@@ -1,0 +1,11 @@
+node_modules
+web/node_modules
+web/dist
+dist
+.env
+*.log
+.DS_Store
+coverage
+data
+*.tmp
+*.bak
