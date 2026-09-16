@@ -10,6 +10,21 @@ test("accepts a bounded shipment batch", () => {
   assert.equal(batch.length, 2);
 });
 
+test("normalizes carrier codes before fingerprinting and duplicate checks", () => {
+  const normalized = validateShipmentBatch([
+    { market: "naver", orderLineId: "line-1", carrierCode: " cjgls ", trackingNumber: "1234567890" }
+  ]);
+  assert.equal(normalized[0]?.carrierCode, "CJGLS");
+
+  assert.throws(() => validateShipmentBatch([
+    { market: "naver", orderLineId: "line-1", carrierCode: "cjgls", trackingNumber: "1234567890" },
+    { market: "naver", orderLineId: "line-2", carrierCode: "CJGLS", trackingNumber: "1234567890" }
+  ]), /tracking number is assigned/);
+  assert.throws(() => validateShipmentBatch([
+    { market: "naver", orderLineId: "line-1", carrierCode: "CJ GLS", trackingNumber: "1234567890" }
+  ]), /carrier code contains unsupported characters/);
+});
+
 test("groups a mixed shipment batch by marketplace without reordering each market", () => {
   const groups = groupShipmentBatchByMarket([
     { market: "naver", orderLineId: "naver-1", carrierCode: "CJGLS", trackingNumber: "1234567890" },
