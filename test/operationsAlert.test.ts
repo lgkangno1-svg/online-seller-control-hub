@@ -25,5 +25,11 @@ test("summarizes alert workload without executing actions", () => {
   assert.deepEqual(summarizeOperationsAlerts([
     { kind: "stock_risk", market: "gmarket", count: 4, threshold: 2, label: "Low stock", detectedAt: now },
     { kind: "settlement_gap", count: 1, threshold: 1, label: "Settlement mismatch", detectedAt: now }
-  ]), { total: 2, critical: 1, warning: 1, confirmationRequired: 1 });
+  ]), {
+    total: 2,
+    critical: 1,
+    warning: 1,
+    confirmationRequired: 1,
+    byKind: { order_backlog: 0, unmapped_sku: 0, stock_risk: 1, claim_backlog: 0, settlement_gap: 1 }
+  });
 });
