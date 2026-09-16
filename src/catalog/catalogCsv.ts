@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { WritableCatalogProduct } from "./catalog.js";
 
 const MAX_ROWS = 1000;
-const headers = ["masterSku", "name", "aliases", "naver", "coupang", "gmarket", "lotteon", "toss", "kakao"] as const;
-const marketHeaders = headers.slice(3);
+const marketHeaders = ["naver", "coupang", "gmarket", "lotteon", "toss", "kakao"] as const satisfies ReadonlyArray<keyof WritableCatalogProduct["markets"]>;
+const headers = ["masterSku", "name", "aliases", ...marketHeaders] as const;
 
 export type CatalogCsvImport = { products: WritableCatalogProduct[]; errors: Array<{ row: number; message: string }> };
 
