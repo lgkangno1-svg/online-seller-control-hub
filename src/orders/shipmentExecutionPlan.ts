@@ -36,8 +36,8 @@ function confirmationKeyFor(batches: ShipmentApiBatch[]): string {
 
 function pendingBatchesFor(input: {
   batches: ShipmentApiBatch[];
-  lastSuccessfulRetryKey?: string;
-  completedRetryKeys?: string[];
+  lastSuccessfulRetryKey?: string | undefined;
+  completedRetryKeys?: string[] | undefined;
 }): ShipmentApiBatch[] {
   if (input.lastSuccessfulRetryKey && input.completedRetryKeys?.length) {
     throw new Error("use either lastSuccessfulRetryKey or completedRetryKeys, not both");
