@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import assert from "node:assert/strict";
+import test from "node:test";
 import { ControlService } from "../src/core/controlService.js";
 import type { MarketAdapter } from "../src/markets/adapter.js";
 import type { CatalogProduct } from "../src/catalog/catalog.js";
@@ -23,28 +24,40 @@ function state(stock: number): MarketState {
   return { market: "naver", externalId: "naver-1", price: 10000, stock, saleStatus: "ON_SALE" };
 }
 
-describe("ControlService approved execution", () => {
-  it("executes when the live state still matches the approved snapshot", async () => {
-    const execute = vi.fn(async () => ({ market: "naver" as const, ok: true, message: "ok" }));
-    const adapter: MarketAdapter = { market: "naver", getState: vi.fn(async () => state(10)), execute };
-    const service = new ControlService(new Map([["naver", adapter]]));
+test("approved execution writes when live state still matches the approved snapshot", async () => {
+  let executeCalls = 0;
+  const adapter: MarketAdapter = {
+    market: "naver",
+    getState: async () => state(10),
+    execute: async () => {
+      executeCalls += 1;
+      return { market: "naver" as const, ok: true, message: "ok" };
+    }
+  };
+  const service = new ControlService(new Map([["naver", adapter]]));
 
-    const results = await service.executeApproved(product, command, [state(10)]);
+  const results = await service.executeApproved(product, command, [state(10)]);
 
-    expect(execute).toHaveBeenCalledOnce();
-    expect(results[0]?.ok).toBe(true);
-  });
+  assert.equal(executeCalls, 1);
+  assert.equal(results[0]?.ok, true);
+});
 
-  it("fails closed without writing when state changed after approval", async () => {
-    const execute = vi.fn(async () => ({ market: "naver" as const, ok: true, message: "ok" }));
-    const adapter: MarketAdapter = { market: "naver", getState: vi.fn(async () => state(7)), execute };
-    const service = new ControlService(new Map([["naver", adapter]]));
+test("approved execution fails closed without writing when state changed after approval", async () => {
+  let executeCalls = 0;
+  const adapter: MarketAdapter = {
+    market: "naver",
+    getState: async () => state(7),
+    execute: async () => {
+      executeCalls += 1;
+      return { market: "naver" as const, ok: true, message: "ok" };
+    }
+  };
+  const service = new ControlService(new Map([["naver", adapter]]));
 
-    const results = await service.executeApproved(product, command, [state(10)]);
+  const results = await service.executeApproved(product, command, [state(10)]);
 
-    expect(execute).not.toHaveBeenCalled();
-    expect(results).toHaveLength(1);
-    expect(results[0]?.ok).toBe(false);
-    expect(results[0]?.message).toContain("다시 승인");
-  });
+  assert.equal(executeCalls, 0);
+  assert.equal(results.length, 1);
+  assert.equal(results[0]?.ok, false);
+  assert.match(results[0]?.message ?? "", /다시 승인/);
 });
