@@ -5,7 +5,7 @@ import { MARKETS, type Market } from "../core/types.js";
 const shipmentSchema = z.object({
   market: z.enum(MARKETS),
   orderLineId: z.string().trim().min(1).max(120),
-  carrierCode: z.string().trim().min(1).max(40),
+  carrierCode: z.string().trim().min(1).max(40).regex(/^[A-Za-z0-9_-]+$/, "carrier code contains unsupported characters").transform((value) => value.toUpperCase()),
   trackingNumber: z.string().trim().min(4).max(80).regex(/^[A-Za-z0-9-]+$/, "tracking number contains unsupported characters")
 });
 
