@@ -5,7 +5,13 @@ type TokenEntry = {
   expiresAt: number;
 };
 
+type CreatedToken = {
+  accessToken: string;
+  expiresInSeconds: number;
+};
+
 const cache = new Map<string, TokenEntry>();
+const inFlight = new Map<string, Promise<string>>();
 
 export function accessTokenCacheKey(market: string, tenantId: string, credentials: unknown): string {
   const fingerprint = createHash("sha256")
@@ -30,6 +36,29 @@ export function setCachedAccessToken(key: string, accessToken: string, expiresIn
   // Refresh a little before the marketplace's advertised expiry time.
   const safetyMs = Math.min(60_000, Math.max(5_000, Math.trunc(ttlMs * 0.05)));
   cache.set(key, { accessToken, expiresAt: Date.now() + ttlMs - safetyMs });
+}
+
+export async function getOrCreateAccessToken(
+  key: string,
+  create: () => Promise<CreatedToken>
+): Promise<string> {
+  const cached = getCachedAccessToken(key);
+  if (cached) return cached;
+
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+
+  const pending = (async () => {
+    const token = await create();
+    setCachedAccessToken(key, token.accessToken, token.expiresInSeconds);
+    return token.accessToken;
+  })();
+  inFlight.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    if (inFlight.get(key) === pending) inFlight.delete(key);
+  }
 }
 
 export function invalidateCachedAccessToken(accessToken: string): void {
