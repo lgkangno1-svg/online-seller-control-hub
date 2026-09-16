@@ -34,6 +34,26 @@ function confirmationKeyFor(batches: ShipmentApiBatch[]): string {
   return `shipment:${createHash("sha256").update(batches.map((batch) => batch.retryKey).join("\n")).digest("hex").slice(0, 24)}`;
 }
 
+function pendingBatchesFor(input: {
+  batches: ShipmentApiBatch[];
+  lastSuccessfulRetryKey?: string;
+  completedRetryKeys?: string[];
+}): ShipmentApiBatch[] {
+  if (input.lastSuccessfulRetryKey && input.completedRetryKeys?.length) {
+    throw new Error("use either lastSuccessfulRetryKey or completedRetryKeys, not both");
+  }
+  if (!input.completedRetryKeys?.length) return resumeShipmentApiBatches(input.batches, input.lastSuccessfulRetryKey);
+
+  const validKeys = new Set(input.batches.map((batch) => batch.retryKey));
+  const completed = new Set<string>();
+  for (const key of input.completedRetryKeys) {
+    if (!validKeys.has(key)) throw new Error("completed shipment retry key does not belong to this batch plan");
+    if (completed.has(key)) throw new Error("completed shipment retry keys must be unique");
+    completed.add(key);
+  }
+  return input.batches.filter((batch) => !completed.has(batch.retryKey));
+}
+
 /**
  * Produces a read-only preview that can be shown in the UI/Telegram confirmation.
  * The confirmation key is bound to the exact validated payload and chunking plan,
@@ -48,6 +68,8 @@ export function buildShipmentExecutionPreview(input: { shipments: unknown; maxIt
  * Builds a bounded, resumable shipment plan without performing marketplace writes.
  * Shipment/invoice changes are externally visible, so the explicit confirmation
  * must carry the payload-bound key previously produced by the preview step.
+ * completedRetryKeys supports partial/out-of-order successes without incorrectly
+ * treating earlier failed marketplace calls as successful.
  */
 export function buildShipmentExecutionPlan(input: {
   shipments: unknown;
@@ -55,6 +77,7 @@ export function buildShipmentExecutionPlan(input: {
   confirmedPlanKey?: string;
   maxItemsPerCall?: number;
   lastSuccessfulRetryKey?: string;
+  completedRetryKeys?: string[];
 }): ShipmentExecutionPlan {
   if (input.confirmed !== true) throw new Error("shipment execution requires explicit confirmation");
 
@@ -64,7 +87,11 @@ export function buildShipmentExecutionPlan(input: {
     throw new Error("shipment confirmation does not match the current payload; preview and confirm this exact shipment plan again");
   }
 
-  const batches = resumeShipmentApiBatches(allBatches, input.lastSuccessfulRetryKey);
+  const batches = pendingBatchesFor({
+    batches: allBatches,
+    lastSuccessfulRetryKey: input.lastSuccessfulRetryKey,
+    completedRetryKeys: input.completedRetryKeys
+  });
   return {
     confirmed: true,
     confirmationKey,

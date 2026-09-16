@@ -61,3 +61,40 @@ test("resumes only after a payload-bound confirmed checkpoint", () => {
   assert.equal(resumed.pendingApiCalls, 2);
   assert.deepEqual(resumed.batches.map((batch) => batch.retryKey), initial.batches.slice(2).map((batch) => batch.retryKey));
 });
+
+test("partial success checkpoints do not skip an earlier failed marketplace call", () => {
+  const initial = confirmedPlan(1);
+  const completedRetryKeys = [initial.batches[1]!.retryKey, initial.batches[3]!.retryKey];
+  const resumed = buildShipmentExecutionPlan({
+    shipments,
+    confirmed: true,
+    confirmedPlanKey: initial.confirmationKey,
+    maxItemsPerCall: 1,
+    completedRetryKeys
+  });
+  assert.equal(resumed.pendingApiCalls, 2);
+  assert.deepEqual(resumed.batches.map((batch) => batch.retryKey), [initial.batches[0]!.retryKey, initial.batches[2]!.retryKey]);
+});
+
+test("rejects partial success checkpoints from another payload plan", () => {
+  const initial = confirmedPlan(1);
+  assert.throws(() => buildShipmentExecutionPlan({
+    shipments,
+    confirmed: true,
+    confirmedPlanKey: initial.confirmationKey,
+    maxItemsPerCall: 1,
+    completedRetryKeys: ["naver:1/1:not-this-plan"]
+  }), /does not belong to this batch plan/);
+});
+
+test("rejects ambiguous sequential and partial checkpoint modes", () => {
+  const initial = confirmedPlan(1);
+  assert.throws(() => buildShipmentExecutionPlan({
+    shipments,
+    confirmed: true,
+    confirmedPlanKey: initial.confirmationKey,
+    maxItemsPerCall: 1,
+    lastSuccessfulRetryKey: initial.batches[0]!.retryKey,
+    completedRetryKeys: [initial.batches[1]!.retryKey]
+  }), /either lastSuccessfulRetryKey or completedRetryKeys/);
+});
