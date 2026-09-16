@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildShipmentExecutionPlan } from "../src/orders/shipmentExecutionPlan.js";
+import { buildShipmentExecutionPlan, buildShipmentExecutionPreview } from "../src/orders/shipmentExecutionPlan.js";
 
 const shipments = [
   { market: "naver", orderLineId: "n-1", carrierCode: "CJGLS", trackingNumber: "1001" },
@@ -9,12 +9,35 @@ const shipments = [
   { market: "naver", orderLineId: "n-3", carrierCode: "CJGLS", trackingNumber: "1003" }
 ];
 
+function confirmedPlan(maxItemsPerCall = 2) {
+  const preview = buildShipmentExecutionPreview({ shipments, maxItemsPerCall });
+  return buildShipmentExecutionPlan({ shipments, confirmed: true, confirmedPlanKey: preview.confirmationKey, maxItemsPerCall });
+}
+
 test("refuses to create an executable shipment plan without explicit confirmation", () => {
-  assert.throws(() => buildShipmentExecutionPlan({ shipments, confirmed: false }), /explicit confirmation/);
+  const preview = buildShipmentExecutionPreview({ shipments });
+  assert.throws(() => buildShipmentExecutionPlan({ shipments, confirmed: false, confirmedPlanKey: preview.confirmationKey }), /explicit confirmation/);
+});
+
+test("requires confirmation to be bound to the exact shipment payload", () => {
+  const preview = buildShipmentExecutionPreview({ shipments });
+  const edited = shipments.map((item, index) => index === 0 ? { ...item, trackingNumber: "9999" } : item);
+  assert.throws(
+    () => buildShipmentExecutionPlan({ shipments: edited, confirmed: true, confirmedPlanKey: preview.confirmationKey }),
+    /does not match the current payload/
+  );
+});
+
+test("changing API chunk size invalidates a previous confirmation", () => {
+  const preview = buildShipmentExecutionPreview({ shipments, maxItemsPerCall: 1 });
+  assert.throws(
+    () => buildShipmentExecutionPlan({ shipments, confirmed: true, confirmedPlanKey: preview.confirmationKey, maxItemsPerCall: 2 }),
+    /does not match the current payload/
+  );
 });
 
 test("summarizes bounded marketplace calls before execution", () => {
-  const plan = buildShipmentExecutionPlan({ shipments, confirmed: true, maxItemsPerCall: 2 });
+  const plan = confirmedPlan(2);
   assert.equal(plan.totalItems, 4);
   assert.equal(plan.totalApiCalls, 3);
   assert.equal(plan.pendingApiCalls, 3);
@@ -25,11 +48,12 @@ test("summarizes bounded marketplace calls before execution", () => {
 });
 
 test("resumes only after a payload-bound confirmed checkpoint", () => {
-  const initial = buildShipmentExecutionPlan({ shipments, confirmed: true, maxItemsPerCall: 1 });
+  const initial = confirmedPlan(1);
   const checkpoint = initial.batches[1]!.retryKey;
   const resumed = buildShipmentExecutionPlan({
     shipments,
     confirmed: true,
+    confirmedPlanKey: initial.confirmationKey,
     maxItemsPerCall: 1,
     lastSuccessfulRetryKey: checkpoint
   });
