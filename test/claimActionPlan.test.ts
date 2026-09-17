@@ -2,11 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { planClaimActions, summarizeClaimActionPlan } from "../src/claims/claimActionPlan.js";
 
-const requestedAt = "2026-09-17T05:00:00+00:00";
-void requestedAt;
-
 test("plans bounded claim mutations behind explicit confirmation", () => {
-  const plan = planClaimActions([
+  const requests = [
     {
       market: "naver",
       externalClaimId: "cancel-1",
@@ -23,14 +20,15 @@ test("plans bounded claim mutations behind explicit confirmation", () => {
       status: "requested",
       action: "request_collection"
     }
-  ]);
+  ];
+  const plan = planClaimActions(requests);
 
   assert.equal(plan.length, 2);
   assert.equal(plan[0]?.requiresConfirmation, true);
   assert.equal(plan[0]?.risk, "high");
   assert.equal(plan[1]?.risk, "medium");
 
-  assert.deepEqual(summarizeClaimActionPlan(plan), {
+  assert.deepEqual(summarizeClaimActionPlan(requests), {
     total: 2,
     highRisk: 1,
     mediumRisk: 1,
