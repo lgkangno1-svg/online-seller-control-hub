@@ -1,0 +1,5 @@
+import { z } from "zod"; import { MARKETS } from "../core/types.js";
+export const MARKET_CAPABILITIES=["products.read","products.write","inventory.write","price.write","orders.read","orders.status.write","shipping.write","claims.read","claims.write","settlement.read"] as const;
+const row=z.object({market:z.enum(MARKETS),capabilities:z.array(z.enum(MARKET_CAPABILITIES)),connected:z.boolean(),authenticated:z.boolean()});
+export function buildCapabilityMatrix(input: unknown){ const rows=z.array(row).max(MARKETS.length).parse(input); const seen=new Set<string>(); return rows.map(r=>{if(seen.has(r.market)) throw new Error(`duplicate market: ${r.market}`);seen.add(r.market);return {...r,usable:r.connected&&r.authenticated,missing:MARKET_CAPABILITIES.filter(c=>!r.capabilities.includes(c))};}); }
+export function capabilityCoverage(input: unknown){ const rows=buildCapabilityMatrix(input); const usable=rows.filter(r=>r.usable); return MARKET_CAPABILITIES.map(capability=>({capability,markets:usable.filter(r=>r.capabilities.includes(capability)).map(r=>r.market),count:usable.filter(r=>r.capabilities.includes(capability)).length})); }
