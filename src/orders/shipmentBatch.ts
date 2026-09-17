@@ -56,10 +56,17 @@ function shipmentChunkFingerprint(items: ShipmentInput[]): string {
     .slice(0, 16);
 }
 
+function shipmentApiLimit(market: Market, requestedLimit: number): number {
+  // Naver Commerce API accepts at most 30 product orders per dispatch request.
+  // Keep the caller limit as an upper bound so smaller operational chunks remain possible.
+  return market === "naver" ? Math.min(requestedLimit, 30) : requestedLimit;
+}
+
 /**
  * Converts a mixed shipment import into bounded marketplace API calls. retryKey
  * includes a payload fingerprint so a checkpoint from an edited shipment plan
- * cannot silently skip different marketplace writes.
+ * cannot silently skip different marketplace writes. Marketplace hard limits are
+ * applied after the caller-provided operational limit (Naver dispatch: max 30).
  */
 export function chunkShipmentBatchByMarket(input: unknown, maxItemsPerCall = 50): ShipmentApiBatch[] {
   if (!Number.isSafeInteger(maxItemsPerCall) || maxItemsPerCall < 1 || maxItemsPerCall > 500) {
@@ -68,9 +75,10 @@ export function chunkShipmentBatchByMarket(input: unknown, maxItemsPerCall = 50)
 
   const result: ShipmentApiBatch[] = [];
   for (const group of groupShipmentBatchByMarket(input)) {
-    const batchCount = Math.ceil(group.items.length / maxItemsPerCall);
-    for (let offset = 0, batchIndex = 0; offset < group.items.length; offset += maxItemsPerCall, batchIndex += 1) {
-      const items = group.items.slice(offset, offset + maxItemsPerCall);
+    const effectiveLimit = shipmentApiLimit(group.market, maxItemsPerCall);
+    const batchCount = Math.ceil(group.items.length / effectiveLimit);
+    for (let offset = 0, batchIndex = 0; offset < group.items.length; offset += effectiveLimit, batchIndex += 1) {
+      const items = group.items.slice(offset, offset + effectiveLimit);
       result.push({
         market: group.market,
         items,

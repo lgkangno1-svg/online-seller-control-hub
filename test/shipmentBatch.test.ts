@@ -52,6 +52,28 @@ test("chunks each marketplace independently with payload-bound retry keys", () =
   assert.equal(new Set(batches.map((batch) => batch.retryKey)).size, batches.length);
 });
 
+test("caps Naver dispatch chunks at the Commerce API 30-order limit", () => {
+  const input = Array.from({ length: 61 }, (_, index) => ({
+    market: "naver" as const,
+    orderLineId: `n-${index + 1}`,
+    carrierCode: "CJGLS",
+    trackingNumber: `1000${index + 1}`
+  }));
+  const batches = chunkShipmentBatchByMarket(input);
+  assert.deepEqual(batches.map((batch) => batch.items.length), [30, 30, 1]);
+  assert.deepEqual(batches.map((batch) => [batch.batchIndex, batch.batchCount]), [[0, 3], [1, 3], [2, 3]]);
+});
+
+test("preserves caller limits below the Naver hard limit", () => {
+  const input = Array.from({ length: 21 }, (_, index) => ({
+    market: "naver" as const,
+    orderLineId: `n-${index + 1}`,
+    carrierCode: "CJGLS",
+    trackingNumber: `2000${index + 1}`
+  }));
+  assert.deepEqual(chunkShipmentBatchByMarket(input, 10).map((batch) => batch.items.length), [10, 10, 1]);
+});
+
 test("resumes after the exact last successful shipment API chunk", () => {
   const input = [
     { market: "naver", orderLineId: "n-1", carrierCode: "CJGLS", trackingNumber: "1001" },
