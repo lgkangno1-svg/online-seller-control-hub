@@ -1,0 +1,3 @@
+import assert from "node:assert/strict"; import test from "node:test"; import { planMarketplacePrices } from "../src/catalog/priceRuleEngine.js";
+test("plans percent and bounded marketplace prices",()=>{ const [p]=planMarketplacePrices([{market:"naver",masterSku:"A",basePrice:10000,adjustmentType:"percent",adjustment:10,maximumPrice:10500}]); assert.equal(p?.plannedPrice,10500); assert.equal(p?.requiresConfirmation,true); });
+test("rejects duplicate channel sku rules",()=>assert.throws(()=>planMarketplacePrices([{market:"naver",masterSku:"A",basePrice:1,adjustmentType:"fixed",adjustment:0},{market:"naver",masterSku:"A",basePrice:1,adjustmentType:"fixed",adjustment:0}]),/duplicate price rule/));
