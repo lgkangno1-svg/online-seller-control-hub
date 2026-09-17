@@ -1,0 +1,4 @@
+import { z } from "zod";
+const canonical=["masterSku","name","price","stock","imageUrl","categoryId"] as const;
+const mapping=z.record(z.string().trim().min(1),z.enum(canonical));
+export function mapCatalogImportRows(input:unknown,columnMapping:unknown){const rows=z.array(z.record(z.string(),z.unknown())).max(5000).parse(input);const map=mapping.parse(columnMapping);const targets=Object.values(map);if(new Set(targets).size!==targets.length)throw new Error("duplicate canonical mapping");for(const required of ["masterSku","name","price","stock"] as const)if(!targets.includes(required))throw new Error(`missing required mapping: ${required}`);return rows.map((raw,rowIndex)=>{const product:Record<string,unknown>={};for(const [source,target] of Object.entries(map))product[target]=raw[source];return {row:rowIndex+1,product};});}
