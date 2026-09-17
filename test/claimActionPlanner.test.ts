@@ -1,0 +1,3 @@
+import assert from "node:assert/strict"; import test from "node:test"; import { planClaimActions } from "../src/claims/claimActionPlanner.js";
+test("requires confirmation for refund and reship actions",()=>{const [row]=planClaimActions([{market:"naver",externalClaimId:"C1",type:"return",action:"complete_refund",reason:"returned",refundAmount:10000}]);assert.equal(row?.requiresConfirmation,true);assert.equal(row?.risk,"high");});
+test("requires refund amount",()=>assert.throws(()=>planClaimActions([{market:"naver",externalClaimId:"C1",type:"return",action:"complete_refund",reason:"returned"}]),/refund amount required/));
